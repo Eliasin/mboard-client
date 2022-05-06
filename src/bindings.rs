@@ -1,6 +1,9 @@
 use mboard::{
     canvas,
-    raster::{chunks, layer, pixels},
+    raster::{
+        chunks, layer, pixels,
+        position::{Dimensions, PixelPosition, Scale},
+    },
 };
 
 use wasm_bindgen::prelude::*;
@@ -15,11 +18,11 @@ impl RasterChunk {
     }
 
     pub fn width(&self) -> usize {
-        self.0.width()
+        self.0.dimensions().width
     }
 
     pub fn height(&self) -> usize {
-        self.0.height()
+        self.0.dimensions().height
     }
 
     #[wasm_bindgen(js_name = "imageData")]
@@ -44,6 +47,13 @@ impl Into<RasterChunk> for chunks::RasterChunk {
 
 #[wasm_bindgen]
 #[derive(Clone, Copy)]
+pub struct CanvasPosition {
+    pub x: i64,
+    pub y: i64,
+}
+
+#[wasm_bindgen]
+#[derive(Clone, Copy)]
 pub struct CanvasView(canvas::CanvasView);
 
 #[wasm_bindgen]
@@ -59,71 +69,90 @@ impl CanvasView {
 
     #[wasm_bindgen(js_name = "resizeView")]
     pub fn resize_view(&mut self, width: usize, height: usize) {
-        self.0.resize_view((width, height));
+        self.0.view_dimensions = Dimensions { width, height };
     }
 
     #[wasm_bindgen(js_name = "resizeCanvasSource")]
     pub fn resize_canvas_source(&mut self, width: usize, height: usize) {
-        self.0.resize_canvas_source((width, height));
+        self.0.canvas_dimensions = Dimensions { width, height };
     }
 
     #[wasm_bindgen(js_name = "viewWidth")]
     pub fn view_width(&self) -> usize {
-        self.0.view_dimensions().0
+        self.0.view_dimensions.width
     }
 
     #[wasm_bindgen(js_name = "viewHeight")]
     pub fn view_height(&self) -> usize {
-        self.0.view_dimensions().1
+        self.0.view_dimensions.height
     }
 
     #[wasm_bindgen(js_name = "canvasWidth")]
     pub fn canvas_width(&self) -> usize {
-        self.0.canvas_dimensions().0
+        self.0.canvas_dimensions.width
     }
 
     #[wasm_bindgen(js_name = "canvasHeight")]
     pub fn canvas_height(&self) -> usize {
-        self.0.canvas_dimensions().1
+        self.0.canvas_dimensions.height
     }
 
     #[wasm_bindgen(js_name = "pinResizeCanvas")]
     pub fn pin_resize_canvas(&mut self, width: usize, height: usize) {
-        self.0.pin_resize_canvas((width, height));
+        self.0.pin_resize_canvas(Dimensions { width, height });
     }
 
     #[wasm_bindgen(js_name = "pinScaleCanvas")]
     pub fn pin_scale_canvas(&mut self, width_factor: f32, height_factor: f32) {
-        self.0.pin_scale_canvas((width_factor, height_factor));
+        self.0.pin_scale_canvas(Scale {
+            width_factor,
+            height_factor,
+        });
     }
 
     #[wasm_bindgen(js_name = "anchorX")]
     pub fn anchor_x(&self) -> i64 {
-        self.0.anchor().0
+        self.0.top_left.0 .0
     }
 
     #[wasm_bindgen(js_name = "anchorY")]
     pub fn anchor_y(&self) -> i64 {
-        self.0.anchor().1
+        self.0.top_left.0 .1
+    }
+
+    #[wasm_bindgen(js_name = "transformViewToCanvas")]
+    pub fn transform_view_to_canvas(&self, x: usize, y: usize) -> CanvasPosition {
+        let canvas_position = self.0.transform_view_to_canvas(PixelPosition((x, y)));
+
+        CanvasPosition {
+            x: canvas_position.0 .0,
+            y: canvas_position.0 .1,
+        }
     }
 }
 
 #[wasm_bindgen]
+#[derive(Copy, Clone, Debug)]
 pub struct CanvasRect(canvas::CanvasRect);
 
 #[wasm_bindgen]
 impl CanvasRect {
     #[wasm_bindgen(constructor)]
-    pub fn new(x: i64, y: i64, width: u32, height: u32) -> CanvasRect {
+    pub fn new(x: i64, y: i64, width: usize, height: usize) -> CanvasRect {
         CanvasRect(canvas::CanvasRect {
-            top_left: (x, y),
-            width,
-            height,
+            top_left: canvas::CanvasPosition((x, y)),
+            dimensions: Dimensions { width, height },
         })
+    }
+
+    #[wasm_bindgen(js_name = "dbg")]
+    pub fn dbg(&self) -> String {
+        format!("{:?}", self)
     }
 }
 
 #[wasm_bindgen]
+#[derive(Copy, Clone)]
 pub struct Pixel(pixels::Pixel);
 
 #[wasm_bindgen]
@@ -170,12 +199,12 @@ pub struct RasterLayerAction(layer::RasterLayerAction);
 #[wasm_bindgen]
 impl RasterLayerAction {
     #[wasm_bindgen(js_name = "fillRect")]
-    pub fn fill_rect(rect: CanvasRect, pixel: Pixel) -> RasterLayerAction {
+    pub fn fill_rect(rect: &CanvasRect, pixel: &Pixel) -> RasterLayerAction {
         RasterLayerAction(layer::RasterLayerAction::fill_rect(rect.0, pixel.0))
     }
 
     #[wasm_bindgen(js_name = "fillOval")]
-    pub fn fill_oval(rect: CanvasRect, pixel: Pixel) -> RasterLayerAction {
+    pub fn fill_oval(rect: &CanvasRect, pixel: &Pixel) -> RasterLayerAction {
         RasterLayerAction(layer::RasterLayerAction::fill_oval(rect.0, pixel.0))
     }
 }
@@ -189,7 +218,7 @@ const RASTER_CHUNK_SIZE: usize = 512;
 impl Canvas {
     #[wasm_bindgen(constructor)]
     pub fn new() -> Canvas {
-        Canvas(canvas::Canvas::new())
+        Canvas(canvas::Canvas::default())
     }
 
     pub fn render(&mut self, view: &CanvasView) -> RasterChunk {

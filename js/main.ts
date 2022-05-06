@@ -1,78 +1,68 @@
 import './style.css';
 
 import '../pkg/mboard_client_bg.wasm';
-import init, { Canvas, RasterChunk, CanvasView, RasterLayerAction, Pixel, CanvasRect } from '../pkg/mboard_client';
-
-function renderChunk(chunk: RasterChunk) {
-    const canvasElement = document.getElementById("canvas") as HTMLCanvasElement;
-
-    const canvasContext = canvasElement.getContext("2d");
-    if (canvasContext !== null) {
-        canvasContext.clearRect(0, 0, canvasElement.width, canvasElement.height);
-
-        const canvasImageData = canvasContext.createImageData(chunk.width(), chunk.height());
-
-        canvasImageData.data.set(chunk.imageData());
-
-        // Clear the canvas
-        canvasContext.clearRect(0, 0, canvasElement.width, canvasElement.height);
-
-        // Place the new generated checkerboard onto the canvas
-        canvasContext.putImageData(canvasImageData, 0, 0);
-    } else {
-        console.error("Could not get canvas context");
-    }
-
-}
-
-function renderCanvas(canvas: Canvas, view: CanvasView) {
-    const raster = canvas.render(view);
-
-    renderChunk(raster);
-}
+import init, { Canvas, CanvasView, RasterLayerAction, Pixel, CanvasRect } from '../pkg/mboard_client';
+import { DrawTool, renderCanvas, resizeCanvas, toolStartsDrag } from './canvas';
+import { DragState } from './interactions';
 
 await init();
-
 
 const canvas = new Canvas();
 const canvasView = new CanvasView(window.innerWidth, window.innerHeight);
 
-function resizeCanvas() {
-    const canvasElement = document.getElementById("canvas") as HTMLCanvasElement;
+let dragState: DragState = { kind: 'idle' };
+let drawTool: DrawTool = { kind: 'brush', color: Pixel.newRgb(255, 0, 0), radius: 50 };
 
-    canvasElement.width = window.innerWidth;
-    canvasElement.height = window.innerHeight;
-
-    canvasView.resizeView(window.innerWidth, window.innerHeight);
-
-}
-
-resizeCanvas();
-
-window.onresize = resizeCanvas;
+resizeCanvas(canvasView);
+//window.onresize = () => resizeCanvas(canvasView);
 
 document.body.onkeydown = (e: KeyboardEvent) => {
-    const TRANSLATE_DELTA = 1;
     switch (e.code) {
             case "ArrowDown": {
-                canvasView.translate(BigInt(0), BigInt(-TRANSLATE_DELTA));
                 canvasView.pinScaleCanvas(0.9, 0.9);
                 break;
             }
             case "ArrowUp": {
-                canvasView.translate(BigInt(0), BigInt(TRANSLATE_DELTA));
-                break;
-            }
-            case "ArrowLeft":
-                canvasView.translate(BigInt(TRANSLATE_DELTA), BigInt(0));
-                break;
-            case "ArrowRight": {
-                canvasView.translate(BigInt(-TRANSLATE_DELTA), BigInt(0));
+                canvasView.pinScaleCanvas(1.1, 1.1);
                 break;
             }
     }
 
     renderCanvas(canvas, canvasView);
+};
+
+const canvasElement = document.getElementById("canvas") as HTMLCanvasElement;
+canvasElement.onmousedown = (e: MouseEvent) => {
+    if (toolStartsDrag(drawTool)) {
+        dragState = { kind: 'dragging', dragStart: [e.offsetX, e.offsetY] };
+    } else if (drawTool.kind === 'brush') {
+        const canvasPosition = canvasView.transformViewToCanvas(e.offsetX, e.offsetY);
+        const radius = drawTool.radius;
+
+        const topLeft = [Number(canvasPosition.x) - radius, Number(canvasPosition.y) - radius];
+        const brushRect = new CanvasRect(BigInt(topLeft[0]), BigInt(topLeft[1]), radius * 2, radius * 2);
+
+        console.log(topLeft);
+        console.log(brushRect.dbg());
+        const brushFill = RasterLayerAction.fillOval(brushRect, drawTool.color);
+        canvas.performRasterAction(0, brushFill);
+
+        renderCanvas(canvas, canvasView);
+    } else if (drawTool.kind === 'eraser') {
+
+    }
+};
+
+canvasElement.onmouseup = (e: MouseEvent) => {
+    if (toolStartsDrag(drawTool)) {
+        if (dragState.kind === 'dragging') {
+            const dragStart = dragState.dragStart;
+            const dragEnd = [e.offsetX, e.offsetY];
+
+            //const canvasDragStart = canvasView.transformViewToCanvas(dragStart[0], dragStart[1]);
+            //const canvasDragEnd = canvasView.transformViewToCanvas(dragEnd[0], dragEnd[1]);
+        }
+    }
 };
 
 canvas.addRasterLayer();
