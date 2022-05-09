@@ -2,7 +2,7 @@ use mboard::{
     canvas,
     raster::{
         chunks, layer, pixels,
-        position::{Dimensions, PixelPosition, Scale},
+        position::{self, Dimensions, Scale},
     },
 };
 
@@ -50,6 +50,13 @@ impl Into<RasterChunk> for chunks::RasterChunk {
 pub struct CanvasPosition {
     pub x: i64,
     pub y: i64,
+}
+
+#[wasm_bindgen]
+#[derive(Clone, Copy)]
+pub struct PixelPosition {
+    pub x: usize,
+    pub y: usize,
 }
 
 #[wasm_bindgen]
@@ -122,12 +129,26 @@ impl CanvasView {
 
     #[wasm_bindgen(js_name = "transformViewToCanvas")]
     pub fn transform_view_to_canvas(&self, x: usize, y: usize) -> CanvasPosition {
-        let canvas_position = self.0.transform_view_to_canvas(PixelPosition((x, y)));
+        let canvas_position = self
+            .0
+            .transform_view_to_canvas(position::PixelPosition((x, y)));
 
         CanvasPosition {
             x: canvas_position.0 .0,
             y: canvas_position.0 .1,
         }
+    }
+
+    #[wasm_bindgen(js_name = "transformCanvasToView")]
+    pub fn transform_canvas_to_view(&self, x: i64, y: i64) -> Option<PixelPosition> {
+        let pixel_position = self
+            .0
+            .transform_canvas_to_view(canvas::CanvasPosition((x, y)));
+
+        pixel_position.map(|p| PixelPosition {
+            x: p.0 .0,
+            y: p.0 .1,
+        })
     }
 }
 
@@ -145,9 +166,24 @@ impl CanvasRect {
         })
     }
 
-    #[wasm_bindgen(js_name = "dbg")]
-    pub fn dbg(&self) -> String {
-        format!("{:?}", self)
+    pub fn width(&self) -> usize {
+        self.0.dimensions.width
+    }
+
+    pub fn height(&self) -> usize {
+        self.0.dimensions.height
+    }
+
+    #[wasm_bindgen(js_name = "topLeft")]
+    pub fn top_left(&self) -> CanvasPosition {
+        let (x, y) = self.0.top_left.0;
+
+        CanvasPosition { x, y }
+    }
+
+    #[wasm_bindgen(js_name = "toViewRect")]
+    pub fn to_view_rect(&self, view: &CanvasView) -> Option<ViewRect> {
+        self.0.to_view_rect(&view.0).map(|v| ViewRect(v))
     }
 }
 
@@ -210,6 +246,27 @@ impl RasterLayerAction {
 }
 
 #[wasm_bindgen]
+pub struct ViewRect(canvas::ViewRect);
+
+#[wasm_bindgen]
+impl ViewRect {
+    pub fn width(&self) -> usize {
+        self.0.dimensions.width
+    }
+
+    pub fn height(&self) -> usize {
+        self.0.dimensions.height
+    }
+
+    #[wasm_bindgen(js_name = "topLeft")]
+    pub fn top_left(&self) -> PixelPosition {
+        let (x, y) = self.0.top_left.0;
+
+        PixelPosition { x, y }
+    }
+}
+
+#[wasm_bindgen]
 pub struct Canvas(canvas::Canvas);
 
 const RASTER_CHUNK_SIZE: usize = 512;
@@ -223,6 +280,11 @@ impl Canvas {
 
     pub fn render(&mut self, view: &CanvasView) -> RasterChunk {
         self.0.render(&view.0).into()
+    }
+
+    #[wasm_bindgen(js_name = "rasterizeCanvasRect")]
+    pub fn rasterize_canvas_rect(&mut self, canvas_rect: CanvasRect) -> RasterChunk {
+        RasterChunk(self.0.render_canvas_rect(canvas_rect.0))
     }
 
     #[wasm_bindgen(js_name = "addRasterLayer")]
@@ -239,6 +301,6 @@ impl Canvas {
     ) -> Option<CanvasRect> {
         self.0
             .perform_raster_action(layer_num, action.0)
-            .map(|c| CanvasRect(c))
+            .map(|v| CanvasRect(v))
     }
 }

@@ -2,8 +2,8 @@ import './style.css';
 
 import '../pkg/mboard_client_bg.wasm';
 import init, { Canvas, CanvasView, RasterLayerAction, Pixel, CanvasRect } from '../pkg/mboard_client';
-import { DrawTool, renderCanvas, resizeCanvas, toolStartsDrag } from './canvas';
-import { DragState } from './interactions';
+import { DrawTool, renderCanvas, resizeCanvas, toolStartsDrag, updateCanvas } from './canvas';
+import { createBrushAction, DragState } from './interactions';
 
 await init();
 
@@ -36,20 +36,25 @@ canvasElement.onmousedown = (e: MouseEvent) => {
     if (toolStartsDrag(drawTool)) {
         dragState = { kind: 'dragging', dragStart: [e.offsetX, e.offsetY] };
     } else if (drawTool.kind === 'brush') {
-        const canvasPosition = canvasView.transformViewToCanvas(e.offsetX, e.offsetY);
-        const radius = drawTool.radius;
+        const brushAction = createBrushAction(e, canvasView, drawTool);
+        const canvasRect = canvas.performRasterAction(0, brushAction);
 
-        const topLeft = [Number(canvasPosition.x) - radius, Number(canvasPosition.y) - radius];
-        const brushRect = new CanvasRect(BigInt(topLeft[0]), BigInt(topLeft[1]), radius * 2, radius * 2);
-
-        console.log(topLeft);
-        console.log(brushRect.dbg());
-        const brushFill = RasterLayerAction.fillOval(brushRect, drawTool.color);
-        canvas.performRasterAction(0, brushFill);
-
-        renderCanvas(canvas, canvasView);
+        if (canvasRect !== undefined) {
+            updateCanvas(canvas, canvasRect, canvasView);
+        }
     } else if (drawTool.kind === 'eraser') {
 
+    }
+};
+
+canvasElement.onmousemove = (e: MouseEvent) => {
+    if (drawTool.kind === 'brush' && e.buttons & 0b1) {
+        const brushAction = createBrushAction(e, canvasView, drawTool);
+        const canvasRect = canvas.performRasterAction(0, brushAction);
+
+        if (canvasRect !== undefined) {
+            updateCanvas(canvas, canvasRect, canvasView);
+        }
     }
 };
 
@@ -66,12 +71,3 @@ canvasElement.onmouseup = (e: MouseEvent) => {
 };
 
 canvas.addRasterLayer();
-
-const canvasRect = new CanvasRect(BigInt(5), BigInt(5), 500, 500);
-const pixel = Pixel.newRgb(255, 0, 0);
-
-const fillRedOval = RasterLayerAction.fillOval(canvasRect, pixel);
-
-canvas.performRasterAction(0, fillRedOval);
-
-renderCanvas(canvas, canvasView);
