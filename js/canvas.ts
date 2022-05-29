@@ -1,4 +1,5 @@
 import { Canvas, RasterChunk, CanvasView, CanvasRect, Pixel } from '../pkg/mboard_client';
+import { DragState } from './interactions';
 
 export function renderChunk(chunk: RasterChunk) {
     const canvasElement = document.getElementById("canvas") as HTMLCanvasElement;
@@ -80,6 +81,12 @@ export type Pan = {
 
 export type DrawTool = Pan | Brush | Eraser | DragRectangle | DragOval;
 
-export function toolStartsDrag(drawTool: DrawTool): boolean {
-    return drawTool.kind === 'pan' || drawTool.kind === 'drag-rectangle' || drawTool.kind === 'drag-oval';
+export function startDragForTool(drawTool: DrawTool, mouseEvent: MouseEvent): DragState {
+    if (drawTool.kind === 'drag-rectangle' || drawTool.kind === 'drag-oval') {
+        return { kind: 'dragging', dragStart: [mouseEvent.offsetX, mouseEvent.offsetY] };
+    } else if (drawTool.kind === 'pan' || drawTool.kind === 'brush' || drawTool.kind === 'eraser') {
+        return { kind: 'continuous', lastPoint: [mouseEvent.offsetX, mouseEvent.offsetY] };
+    } else {
+        return { kind: 'idle' };
+    }
 }
