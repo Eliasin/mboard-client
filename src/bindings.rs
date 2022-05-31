@@ -1,3 +1,6 @@
+use std::{convert::TryInto, mem::MaybeUninit};
+
+use bumpalo::Bump;
 use mboard::{
     canvas,
     raster::{
@@ -6,13 +9,123 @@ use mboard::{
     },
 };
 
-use wasm_bindgen::prelude::*;
+use wasm_bindgen::{prelude::*, Clamped};
+use web_sys::ImageData;
 
 #[wasm_bindgen]
-pub struct RasterChunk(chunks::RasterChunk);
+pub struct ImageDataService {
+    bump: Bump,
+}
+
+impl ImageDataService {
+    fn get_pixel_bytes<'bump>(
+        pixels: bumpalo::boxed::Box<[pixels::Pixel]>,
+        bump: &'bump Bump,
+    ) -> bumpalo::boxed::Box<'bump, [u8]> {
+        const PIXEL_SIZE_IN_U8: usize = 4;
+
+        let pixel_bytes: &'bump mut [MaybeUninit<u8>] =
+            bump.alloc_slice_fill_copy(pixels.len() * PIXEL_SIZE_IN_U8, MaybeUninit::uninit());
+
+        for (i, pixel) in pixels.into_iter().enumerate() {
+            let (r, g, b, a) = pixel.as_rgba();
+
+            let dest_start_index = i * PIXEL_SIZE_IN_U8;
+            let dest_end_index = (i + 1) * PIXEL_SIZE_IN_U8;
+            MaybeUninit::write_slice(
+                &mut pixel_bytes[dest_start_index..dest_end_index],
+                &[r, g, b, a],
+            );
+        }
+
+        let pixel_bytes =
+            unsafe { std::mem::transmute::<_, bumpalo::boxed::Box<'bump, [u8]>>(pixel_bytes) };
+
+        pixel_bytes
+    }
+}
 
 #[wasm_bindgen]
-impl RasterChunk {
+impl ImageDataService {
+    #[wasm_bindgen(constructor)]
+    pub fn new() -> ImageDataService {
+        ImageDataService { bump: Bump::new() }
+    }
+
+    #[wasm_bindgen(js_name = "getImageDataFromCanvas")]
+    pub fn get_image_data_from_canvas(
+        &mut self,
+        canvas: &mut Canvas,
+        view: &CanvasView,
+    ) -> ImageData {
+        let (pixel_bytes, width) = {
+            let canvas_raster = canvas.0.render_into_bump(&view.0, &self.bump);
+
+            let width = canvas_raster.dimensions().width;
+            let pixels = canvas_raster.into_pixels();
+
+            let pixel_bytes = ImageDataService::get_pixel_bytes(pixels, &self.bump);
+            (pixel_bytes, width)
+        };
+
+        let clamped_pixel_bytes = Clamped(&*pixel_bytes);
+
+        let image_data =
+            ImageData::new_with_u8_clamped_array(clamped_pixel_bytes, width.try_into().unwrap())
+                .unwrap();
+
+        std::mem::drop(clamped_pixel_bytes);
+        std::mem::drop(pixel_bytes);
+        self.bump.reset();
+
+        image_data
+    }
+
+    #[wasm_bindgen(js_name = "getImageDataFromCanvasRect")]
+    pub fn get_image_data_from_canvas_rect(
+        &mut self,
+        canvas: &mut Canvas,
+        canvas_rect: &CanvasRect,
+    ) -> ImageData {
+        let (pixel_bytes, width) = {
+            let canvas_rect_raster = canvas
+                .0
+                .render_canvas_rect_into_bump(canvas_rect.0, &self.bump);
+
+            let width = canvas_rect_raster.dimensions().width;
+            let pixels = canvas_rect_raster.into_pixels();
+
+            let mut pixel_bytes =
+                bumpalo::collections::Vec::<u8>::with_capacity_in(pixels.len() * 4, &self.bump);
+
+            for pixel in pixels.into_iter() {
+                let (r, g, b, a) = pixel.as_rgba();
+                pixel_bytes.push(r);
+                pixel_bytes.push(g);
+                pixel_bytes.push(b);
+                pixel_bytes.push(a);
+            }
+            (pixel_bytes, width)
+        };
+
+        let clamped_pixel_bytes = Clamped(pixel_bytes.as_slice());
+
+        let image_data =
+            ImageData::new_with_u8_clamped_array(clamped_pixel_bytes, width.try_into().unwrap())
+                .unwrap();
+
+        std::mem::drop(pixel_bytes);
+        self.bump.reset();
+
+        image_data
+    }
+}
+
+#[wasm_bindgen]
+pub struct BoxRasterChunk(chunks::BoxRasterChunk);
+
+#[wasm_bindgen]
+impl BoxRasterChunk {
     pub fn pixels(&self) -> Vec<u32> {
         self.0.pixels().iter().map(|p| p.0).collect()
     }
@@ -39,9 +152,9 @@ impl RasterChunk {
     }
 }
 
-impl Into<RasterChunk> for chunks::RasterChunk {
-    fn into(self) -> RasterChunk {
-        RasterChunk(self)
+impl Into<BoxRasterChunk> for chunks::BoxRasterChunk {
+    fn into(self) -> BoxRasterChunk {
+        BoxRasterChunk(self)
     }
 }
 
@@ -278,13 +391,13 @@ impl Canvas {
         Canvas(canvas::Canvas::default())
     }
 
-    pub fn render(&mut self, view: &CanvasView) -> RasterChunk {
+    pub fn render(&mut self, view: &CanvasView) -> BoxRasterChunk {
         self.0.render(&view.0).into()
     }
 
     #[wasm_bindgen(js_name = "rasterizeCanvasRect")]
-    pub fn rasterize_canvas_rect(&mut self, canvas_rect: CanvasRect) -> RasterChunk {
-        RasterChunk(self.0.render_canvas_rect(canvas_rect.0))
+    pub fn rasterize_canvas_rect(&mut self, canvas_rect: CanvasRect) -> BoxRasterChunk {
+        BoxRasterChunk(self.0.render_canvas_rect(canvas_rect.0))
     }
 
     #[wasm_bindgen(js_name = "addRasterLayer")]

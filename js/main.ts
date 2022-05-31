@@ -1,7 +1,12 @@
 import "./style.css";
 
 import "../pkg/mboard_client_bg.wasm";
-import init, { Canvas, CanvasView, Pixel } from "../pkg/mboard_client";
+import init, {
+  Canvas,
+  CanvasView,
+  ImageDataService,
+  Pixel,
+} from "../pkg/mboard_client";
 import {
   DrawTool,
   renderCanvas,
@@ -15,6 +20,7 @@ await init();
 
 const canvas = new Canvas();
 const canvasView = new CanvasView(window.innerWidth, window.innerHeight);
+const imageDataService = new ImageDataService();
 
 let dragState: DragState = { kind: "idle" };
 let drawTool: DrawTool = {
@@ -30,12 +36,12 @@ document.body.onkeydown = (e: KeyboardEvent) => {
   switch (e.code) {
     case "ArrowDown": {
       canvasView.pinScaleCanvas(0.9, 0.9);
-      renderCanvas(canvas, canvasView);
+      renderCanvas(imageDataService, canvas, canvasView);
       break;
     }
     case "ArrowUp": {
       canvasView.pinScaleCanvas(1.1, 1.1);
-      renderCanvas(canvas, canvasView);
+      renderCanvas(imageDataService, canvas, canvasView);
       break;
     }
     case "KeyP": {
@@ -58,7 +64,7 @@ canvasElement.onmousedown = (e: MouseEvent) => {
     const canvasRect = canvas.performRasterAction(0, brushAction);
 
     if (canvasRect !== undefined) {
-      updateCanvas(canvas, canvasRect, canvasView);
+      updateCanvas(imageDataService, canvas, canvasRect, canvasView);
     }
   } else if (drawTool.kind === "eraser") {
   }
@@ -77,7 +83,7 @@ canvasElement.onmousemove = (e: MouseEvent) => {
         canvasView.translate(BigInt(-delta[0]), BigInt(-delta[1]));
 
         dragState.lastPoint = [e.offsetX, e.offsetY];
-        renderCanvas(canvas, canvasView);
+        renderCanvas(imageDataService, canvas, canvasView);
         break;
       }
       case "brush": {
@@ -86,7 +92,7 @@ canvasElement.onmousemove = (e: MouseEvent) => {
           const canvasRect = canvas.performRasterAction(0, brushAction);
 
           if (canvasRect !== undefined) {
-            updateCanvas(canvas, canvasRect, canvasView);
+            updateCanvas(imageDataService, canvas, canvasRect, canvasView);
           }
         }
       }

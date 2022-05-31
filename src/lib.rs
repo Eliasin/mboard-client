@@ -1,3 +1,4 @@
+#![feature(maybe_uninit_write_slice)]
 mod bindings;
 mod utils;
 
