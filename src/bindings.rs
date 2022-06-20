@@ -80,45 +80,6 @@ impl ImageDataService {
 
         image_data
     }
-
-    #[wasm_bindgen(js_name = "getImageDataFromCanvasRect")]
-    pub fn get_image_data_from_canvas_rect(
-        &mut self,
-        canvas: &mut Canvas,
-        canvas_rect: &CanvasRect,
-    ) -> ImageData {
-        let (pixel_bytes, width) = {
-            let canvas_rect_raster = canvas
-                .0
-                .render_canvas_rect_into_bump(canvas_rect.0, &self.bump);
-
-            let width = canvas_rect_raster.dimensions().width;
-            let pixels = canvas_rect_raster.into_pixels();
-
-            let mut pixel_bytes =
-                bumpalo::collections::Vec::<u8>::with_capacity_in(pixels.len() * 4, &self.bump);
-
-            for pixel in pixels.into_iter() {
-                let (r, g, b, a) = pixel.as_rgba();
-                pixel_bytes.push(r);
-                pixel_bytes.push(g);
-                pixel_bytes.push(b);
-                pixel_bytes.push(a);
-            }
-            (pixel_bytes, width)
-        };
-
-        let clamped_pixel_bytes = Clamped(pixel_bytes.as_slice());
-
-        let image_data =
-            ImageData::new_with_u8_clamped_array(clamped_pixel_bytes, width.try_into().unwrap())
-                .unwrap();
-
-        std::mem::drop(pixel_bytes);
-        self.bump.reset();
-
-        image_data
-    }
 }
 
 #[wasm_bindgen]
@@ -263,6 +224,11 @@ impl CanvasView {
             y: p.0 .1,
         })
     }
+
+    #[wasm_bindgen(js_name = "canvasRectSubview")]
+    pub fn canvas_rect_subview(&self, canvas_rect: &CanvasRect) -> Option<CanvasView> {
+        Some(CanvasView(self.0.canvas_rect_subview(&canvas_rect.0)?))
+    }
 }
 
 #[wasm_bindgen]
@@ -296,7 +262,9 @@ impl CanvasRect {
 
     #[wasm_bindgen(js_name = "toViewRect")]
     pub fn to_view_rect(&self, view: &CanvasView) -> Option<ViewRect> {
-        self.0.to_view_rect(&view.0).map(|v| ViewRect(v))
+        view.0
+            .transform_canvas_rect_to_view(&self.0)
+            .map(|v| ViewRect(v))
     }
 }
 
@@ -397,7 +365,7 @@ impl Canvas {
 
     #[wasm_bindgen(js_name = "rasterizeCanvasRect")]
     pub fn rasterize_canvas_rect(&mut self, canvas_rect: CanvasRect) -> BoxRasterChunk {
-        BoxRasterChunk(self.0.render_canvas_rect(canvas_rect.0))
+        BoxRasterChunk(self.0.rasterize_canvas_rect(canvas_rect.0))
     }
 
     #[wasm_bindgen(js_name = "addRasterLayer")]

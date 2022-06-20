@@ -58,7 +58,6 @@ document.body.onkeydown = (e: KeyboardEvent) => {
 const canvasElement = document.getElementById("canvas") as HTMLCanvasElement;
 canvasElement.onmousedown = (e: MouseEvent) => {
   dragState = startDragForTool(drawTool, e);
-  console.log(dragState);
   if (drawTool.kind === "brush") {
     const brushAction = createBrushAction(e, canvasView, drawTool);
     const canvasRect = canvas.performRasterAction(0, brushAction);
@@ -79,7 +78,6 @@ canvasElement.onmousemove = (e: MouseEvent) => {
           e.offsetY - dragState.lastPoint[1],
         ];
 
-        console.log(e.offsetX, e.offsetY, dragState);
         canvasView.translate(BigInt(-delta[0]), BigInt(-delta[1]));
 
         dragState.lastPoint = [e.offsetX, e.offsetY];

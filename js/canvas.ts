@@ -33,12 +33,13 @@ export function updateCanvas(
 
   const canvasContext = canvasElement.getContext("2d");
   if (canvasContext !== null) {
+    const subview = canvasView.canvasRectSubview(canvasRect);
     const dirtyRect = canvasRect.toViewRect(canvasView);
 
-    if (dirtyRect !== undefined) {
-      const imageData = imageDataService.getImageDataFromCanvasRect(
+    if (dirtyRect !== undefined && subview !== undefined) {
+      const imageData = imageDataService.getImageDataFromCanvas(
         canvas,
-        canvasRect
+        subview
       );
 
       canvasContext.putImageData(
