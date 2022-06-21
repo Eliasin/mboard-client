@@ -78,7 +78,7 @@ canvasElement.onmousemove = (e: MouseEvent) => {
           e.offsetY - dragState.lastPoint[1],
         ];
 
-        canvasView.translate(BigInt(-delta[0]), BigInt(-delta[1]));
+        canvasView.translate(-delta[0], -delta[1]);
 
         dragState.lastPoint = [e.offsetX, e.offsetY];
         renderCanvas(imageDataService, canvas, canvasView);

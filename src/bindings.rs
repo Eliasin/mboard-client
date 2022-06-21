@@ -3,10 +3,11 @@ use std::{convert::TryInto, mem::MaybeUninit};
 use bumpalo::Bump;
 use mboard::{
     canvas,
-    raster::{
-        chunks, layer, pixels,
-        position::{self, Dimensions, Scale},
+    primitives::{
+        dimensions::{Dimensions, Scale},
+        rect,
     },
+    raster::{chunks, layer, pixels},
 };
 
 use wasm_bindgen::{prelude::*, Clamped};
@@ -16,7 +17,6 @@ use web_sys::ImageData;
 pub struct ImageDataService {
     bump: Bump,
 }
-
 impl ImageDataService {
     fn get_pixel_bytes<'bump>(
         pixels: bumpalo::boxed::Box<[pixels::Pixel]>,
@@ -122,8 +122,8 @@ impl Into<BoxRasterChunk> for chunks::BoxRasterChunk {
 #[wasm_bindgen]
 #[derive(Clone, Copy)]
 pub struct CanvasPosition {
-    pub x: i64,
-    pub y: i64,
+    pub x: i32,
+    pub y: i32,
 }
 
 #[wasm_bindgen]
@@ -144,8 +144,8 @@ impl CanvasView {
         CanvasView(canvas::CanvasView::new(width, height))
     }
 
-    pub fn translate(&mut self, x: i64, y: i64) {
-        self.0.translate((x, y))
+    pub fn translate(&mut self, x: i32, y: i32) {
+        self.0.translate((x, y).into())
     }
 
     #[wasm_bindgen(js_name = "resizeView")]
@@ -192,37 +192,30 @@ impl CanvasView {
     }
 
     #[wasm_bindgen(js_name = "anchorX")]
-    pub fn anchor_x(&self) -> i64 {
-        self.0.top_left.0 .0
+    pub fn anchor_x(&self) -> i32 {
+        self.0.top_left.0
     }
 
     #[wasm_bindgen(js_name = "anchorY")]
-    pub fn anchor_y(&self) -> i64 {
-        self.0.top_left.0 .1
+    pub fn anchor_y(&self) -> i32 {
+        self.0.top_left.1
     }
 
     #[wasm_bindgen(js_name = "transformViewToCanvas")]
     pub fn transform_view_to_canvas(&self, x: usize, y: usize) -> CanvasPosition {
-        let canvas_position = self
-            .0
-            .transform_view_to_canvas(position::PixelPosition((x, y)));
+        let canvas_position = self.0.transform_view_to_canvas((x, y).into());
 
         CanvasPosition {
-            x: canvas_position.0 .0,
-            y: canvas_position.0 .1,
+            x: canvas_position.0,
+            y: canvas_position.1,
         }
     }
 
     #[wasm_bindgen(js_name = "transformCanvasToView")]
-    pub fn transform_canvas_to_view(&self, x: i64, y: i64) -> Option<PixelPosition> {
-        let pixel_position = self
-            .0
-            .transform_canvas_to_view(canvas::CanvasPosition((x, y)));
+    pub fn transform_canvas_to_view(&self, x: i32, y: i32) -> Option<PixelPosition> {
+        let pixel_position = self.0.transform_canvas_to_view((x, y).into());
 
-        pixel_position.map(|p| PixelPosition {
-            x: p.0 .0,
-            y: p.0 .1,
-        })
+        pixel_position.map(|p| PixelPosition { x: p.0, y: p.1 })
     }
 
     #[wasm_bindgen(js_name = "canvasRectSubview")]
@@ -233,14 +226,14 @@ impl CanvasView {
 
 #[wasm_bindgen]
 #[derive(Copy, Clone, Debug)]
-pub struct CanvasRect(canvas::CanvasRect);
+pub struct CanvasRect(rect::CanvasRect);
 
 #[wasm_bindgen]
 impl CanvasRect {
     #[wasm_bindgen(constructor)]
-    pub fn new(x: i64, y: i64, width: usize, height: usize) -> CanvasRect {
-        CanvasRect(canvas::CanvasRect {
-            top_left: canvas::CanvasPosition((x, y)),
+    pub fn new(x: i32, y: i32, width: usize, height: usize) -> CanvasRect {
+        CanvasRect(rect::CanvasRect {
+            top_left: (x, y).into(),
             dimensions: Dimensions { width, height },
         })
     }
@@ -255,7 +248,7 @@ impl CanvasRect {
 
     #[wasm_bindgen(js_name = "topLeft")]
     pub fn top_left(&self) -> CanvasPosition {
-        let (x, y) = self.0.top_left.0;
+        let (x, y) = self.0.top_left.into();
 
         CanvasPosition { x, y }
     }
@@ -327,7 +320,7 @@ impl RasterLayerAction {
 }
 
 #[wasm_bindgen]
-pub struct ViewRect(canvas::ViewRect);
+pub struct ViewRect(rect::ViewRect);
 
 #[wasm_bindgen]
 impl ViewRect {
@@ -341,7 +334,7 @@ impl ViewRect {
 
     #[wasm_bindgen(js_name = "topLeft")]
     pub fn top_left(&self) -> PixelPosition {
-        let (x, y) = self.0.top_left.0;
+        let (x, y) = self.0.top_left.into();
 
         PixelPosition { x, y }
     }

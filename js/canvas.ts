@@ -44,8 +44,8 @@ export function updateCanvas(
 
       canvasContext.putImageData(
         imageData,
-        Number(dirtyRect.topLeft().x),
-        Number(dirtyRect.topLeft().y)
+        dirtyRect.topLeft().x,
+        dirtyRect.topLeft().y
       );
     }
   } else {
